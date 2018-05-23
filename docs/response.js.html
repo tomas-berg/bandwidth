@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: response.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: response.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/** @module response */
+'use strict';
+
+const xmlJS     = require('xml-js');
+const fetch     = require('node-fetch');
+const BWError   = require('./error.js');
+
+const v = (param) => { throw new Error(`Class CBWResponse: Not valid param: ${param}`); };
+/**
+ * Base abstract class representing a CBWResponse.
+ */
+class CBWResponse {
+    constructor(
+        text        = v('text'),
+        accId       = v('accId'),
+        site        = v('site'),
+        sippeerId   = v('sippeerId'),
+        options     = v('options'),
+        headers     = v('headers'),
+        baseUrl     = v('baseUrl')) {
+        this.text       = text;
+        this.accId      = accId;
+        this.site       = site;
+        this.sippeerId  = sippeerId;
+        this.options    = options;
+        this.headers    = headers;
+        this.baseUrl    = baseUrl;
+    }
+
+    set text(text) {
+        this.textValue  = text;
+        this.json       = null;
+    }
+
+    get text() { return this.textValue; }
+
+    /** Convert to JSON obj */
+    toJSON() {
+        if (!this.text)
+            return null;
+
+        if (!this.json)
+            this.json = xmlJS.xml2js(this.text, { compact: true });
+
+        return this.json;
+    }
+
+    /** Get numbers array */
+    get Numbers() {
+        if (!this.toJSON())
+            return null;
+
+        let result = [];
+
+        if (this.json.SipPeerTelephoneNumbersResponse
+            .SipPeerTelephoneNumbers
+            .SipPeerTelephoneNumber instanceof Array)
+            result = this.json.SipPeerTelephoneNumbersResponse
+                .SipPeerTelephoneNumbers
+                .SipPeerTelephoneNumber
+                .map((item) => item.FullNumber._text);
+        else
+            result = [ this.json.SipPeerTelephoneNumbersResponse.SipPeerTelephoneNumbers.SipPeerTelephoneNumber.FullNumber._text ];
+
+        return result;
+    }
+
+    /** Return raw XML */
+    toXML() {
+        return this.text;
+    }
+
+    /** Overloaded */
+    toString() {
+        return this.text;
+    }
+
+    /** Overloaded */
+    inspect() {
+        return this.text;
+    }
+}
+
+/**
+ * Class representing a CBWTNSResponse.
+ * @extends CBWResponse
+ * @type {CBWTNSResponse}
+ */
+class CBWTNSResponse extends CBWResponse {
+    /**
+     * Create a BWTNSResponse.
+     * @param {string} text - The text message as XML doc returned.
+     */
+    constructor(text, accId, site, sippeerId, options, headers, baseUrl) {
+        super(text, accId, site, sippeerId, options, headers, baseUrl);
+        this.nextIndex  = 0;
+        this.regex      = /&lt;(.+)>/;
+    }
+
+    [Symbol.iterator]() { return this; }
+
+    /** Get next page iterator method */
+    next() {
+        if (!((((this.toJSON() || {}).SipPeerTelephoneNumbersResponse || {}).Links || {}).next || {})._text)
+            return { done: true };
+
+        const link = this.regex.exec(this.toJSON().SipPeerTelephoneNumbersResponse.Links.next._text)[1];
+        return { value: (async function(_this, link) {
+            const res = await fetch(link, { headers: _this.headers });
+
+            if (!res.ok)
+                throw new BWError.CBWTNSError(res.statusText);
+
+            _this.text = await res.text();
+            _this.nextIndex++;
+            return { value: new CBWTNSResponse(_this.text, _this.accId, _this.site, _this.sippeerId, _this.options, _this.headers, _this.baseUrl), done: false };
+        })(this, link), done: false };
+    }
+}
+
+module.exports = { CBWTNSResponse };</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-bandwidth.html">bandwidth</a></li><li><a href="module-error.html">error</a></li><li><a href="module-response.html">response</a></li></ul><h3>Classes</h3><ul><li><a href="module-bandwidth-CBandwidth.html">CBandwidth</a></li><li><a href="module-error-CBWError.html">CBWError</a></li><li><a href="module-error-CBWTNSError.html">CBWTNSError</a></li><li><a href="module-response-CBWResponse.html">CBWResponse</a></li><li><a href="module-response-CBWTNSResponse.html">CBWTNSResponse</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Fri Nov 03 2017 10:19:35 GMT+0000 (UTC)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
